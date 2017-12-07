@@ -1,0 +1,477 @@
+#Portfolio assignment 3, part 1
+####*Experimental Methods 3*
+**Helene Hauge Westerlund**  
+16/10 2017  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+What skills i have to master for this assignment:
+- How to run CRQA
+- How to efficiently run through 1400 data files with a good loop.
+      
+When we loop through 1400 files, it takes time and it will crash. 
+The function try() can be wrapped around any other function. It does so that if your loop crashes it spits our an error but keeps the loop running.
+  
+_____________________________________________________________________
+*Notes from class on common issues*
+
+CRQA:
+- Find delay threshold(T) (run mutual())
+  Take minimum possible value from plot (really conservative, which means that you will lose a lot of your time series).
+  Take the point after which it starts growing again (right bottom of valley) (less conservative).
+  Take the point just when it have fallen to the bottom of the valley (even less conservative).
+      The two last lets you keep more of your time series.
+        The function optimiseparam() from the slides does all this for you, but chooses the most conservative T.
+        Will sometimes give you an error: embed >< delay longer something. This means it excludes some time series, which is okay and we will use the try() to loop around the error because we can lose them now. For this exercise we can choose the simplest of ways.
+        
+In the slides are also code for visualising plots.
+
+On the txt documents:
+studyN = which of the studies run
+S = subject number (100's for study 1, 200's for study 2...)
+0 = control (D = diagnosis)
+1 = schizophrenia (D = diagnosis)
+T = trial
+
+Experimenters tried hard to match the participants as closely as possible. THis is the reason that different people have the same ID (to show that they are similar).
+
+HELP:
+When in trouble, send email to Celine with github.
+_____________________________________________________________________
+
+
+## Assignment 2 - Part 1 - Assessing voice in schizophrenia
+
+Schizophrenia has been associated with "inappropriate" voice, sometimes monotone, sometimes croaky. A few studies indicate that pitch might be an index of schizophrenia. However, an ongoing meta-analysis of the literature (which you will have a go at in the last assignment) indicates that pitch mean and standard deviation are only weak indicators of diagnosis. Can we do better with our new fancy complex skills?
+
+The corpus you are asked to analyse is a set of voice recordings from people with schizophrenia (just after first diagnosis) and 1-1 matched controls (on gender, age, education). Each participant watched 10 videos of triangles moving across the screen and had to describe them (so you have circa 10 recordings per person). I have already extracted the pitch once every 10 milliseconds and you will have to use this data to assess differences in the voice.
+
+HAND IN THIS:
+------------------------
+N.B. Question to be answered via email to Celine: can you characterize voice in schizophrenia as acoustically different? Report the methods you used to answer this question and the results from the analyses. Add a couple of lines trying to interpret the results (make sense of the difference). E.g. People with schizophrenia tend to have high-pitched voice, and present bigger swings in their prosody than controls. Add a couple of lines describing limitations of the data/analyses if any is relevant.
+------------------------
+
+N.B. There are lots of files to be dealt with. Probably too many for your computer. This is a challenge for you. Some (complementary) possible strategies: You can select a subset of files only (and you have to justify your choice). You can learn how to use the apply() or map() functions. You can coordinate with classmates.
+
+***   
+
+*Loading data files*
+```{r}
+setwd("C:/Users/Helene/Documents/RStudio working directory/Experimental Methods 3/assignment3, part 1-2")
+
+#putting all files in one variable
+files = list.files(path = "C:/Users/Helene/Documents/RStudio working directory/Experimental Methods 3/assignment3, part 1/Pitch",pattern="*.txt")
+print(files)
+
+Articulation = read.delim("Articulation.txt", sep=",")
+DemoData = read.delim("DemoData.txt", sep="")
+
+
+# Maybe i should find a way to get the standard info from the files into a data frame, i.e. diagnosis, trial...
+# Is this possible? How have other people done it?
+```
+
+
+***   
+
+*Extracting standard descriptors for a single data file*
+```{r}
+#Choosing single data file
+Datafile_1 = read.table("Pitch/Study1D0S101T1_f0.txt", header=TRUE)
+```
+
+***   
+
+*1* Extracting "standard" descriptors of pitch; mean, sd, range.
+```{r, warning=FALSE, message=F}
+library(psych)
+describe(Datafile_1)
+
+```
+Assuming that f0 is frequency and therefore pitch.
+Mean = 139.92
+Standard deviation = 31.38
+Range(difference of largest and smallest values) = 142.01
+
+***   
+
+*1.1* Extracting less "standard" descriptors of pitch I can think of (e.g. median, iqr, mean absoluted deviation, coefficient of variation)
+```{r}
+library(pastecs)
+stat.desc(Datafile_1)
+
+#Coefficient of variation
+sd(Datafile_1$f0, na.rm=TRUE)/ 
+   mean(Datafile_1$f0, na.rm=TRUE)*100
+```
+Median = 125.59
+Coefficient of variation (CV) = 22.43
+
+***   
+
+*1.2* Extracting "complex" descriptors: recurrence quantification analysis (RQA)
+
+*Delay parameter threshold(T)*; can be estimated using the mutual average information function.
+T is the basis of unfolding the one-dimensional time-series into a multidimensional phase-space.
+```{r}
+library(tseriesChaos)
+# run average mutual information
+mutual(Datafile_1$f0, lag.max = 50)
+```
+Because I will be doing this later in the loop, i use the most conservative way to choose a delay threshold (T).
+The lowest value on this plot is 22, which will be my T.
+T = 22
+
+***   
+
+Trying this tutorial:
+https://quantdev.ssri.psu.edu/sites/qdev/files/CRQATutorial_LabMeeting_160714.html 
+Within the ‘crqa’ package, the funtion ‘optimizeParam’ will find the hyperparameters that will lead to the largest percent recurrence. 
+
+```{r message=F, warning=F}
+mlpar = list(lgM =  35, radiusspan = 400, radiussample = 2, normalize = 0, rescale = 1, mindiagline = 2, 
+             minvertline = 2, tw = 0, whiteline = FALSE, recpt = FALSE, fnnpercent = 10, typeami = "maxlag")
+
+library(crqa)
+optpar = optimizeParam(Datafile_1, Datafile_1, mlpar)
+optpar
+```
+
+***
+
+*Embedding parameter D*; can be estimated using the false-nearest neighbor function.
+If D = 1, we do not need to embed.
+If D > 1, we want to unfold the one-dimensional time-series into as many dimensions so that we exhaust all information about higher-dimensional dynamics contained in the time-series, but not more.
+
+m: embedding dimension D
+d: delay T
+t: an additional parameter, the Theiler-window, that can help to increase the reliability of the false-nearest neighbor analysis and recurrence statistics by removing unwanted short-term temporal correlations.
+```{r}
+# run false-nearestneighbor analysis
+fnn = false.nearest(Datafile_1$f0, m=5, d=22, t=0)
+plot(fnn)
+```
+The number of false-nearest neighbours drops off at a value of 2. Hence, D = 2 for our data.
+
+***   
+
+*Running CRQA*
+```{r, message=FALSE, warning=FALSE}
+Results = crqa(Datafile_1$f0, Datafile_1$f0, delay=22, embed=2, radius=0.6,normalize=0,rescale=0,mindiagline = 2,minvertline = 2)
+Results
+
+#Represent the plot
+RP = Results$RP
+RP = matrix(as.numeric(RP), nrow = ncol(RP))
+cols = c("white","blue4")
+image(RP, xlab = "", ylab = "", col = cols) 
+```
+
+
+*2.* Turning the code into a function and looping through all the files (or even better use apply/sapply/lapply)
+Remember to extract the relevant information from the file names (Participant, Diagnosis, Trial, Study)
+
+Note from Dominik: You should get all the descriptors (mean,sd, reccurence etc) for each txt file...so after you run the loop you'll end up with a big dataframe that has 1 row per each txt file.
+```{r}
+#_______________________________________________part Pernille helped with_________________________________________
+
+folder = "C:/Users/Helene/Documents/RStudio working directory/Experimental Methods 3/assignment3, part 1-2/Pitch" # ****** REMEMBER, fill folder with subset of data ****** #tilføj /test når du har lavet subset
+
+filelist = list.files(path = folder, pattern = "*.txt", full.names =TRUE) #takes txt-files
+
+filename = filelist
+#filename = filelist[1:100]
+
+### FUNCTION 1 ###
+#This part is just making the function - Like you make the bread, which you can use later for stuff.
+optimalparameter_extractor = function(filename) { #Function that extracts optimal parameters
+  library(data.table)
+  temp_dataframe = read.delim(filename)
+  parameters = list(lgM =  50, steps = seq(1, 6, 1),  radiusspan = 20,  radiussample = 5, normalize = 0,  rescale = 0,  mindiagline = 2,  minvertline = 2,  tw = 0,  whiteline = FALSE,  recpt = FALSE,  fnnpercent = 10,  typeami = "mindip")
+
+  optimalparameters = NULL
+optimalparameters = try(optimizeParam(temp_dataframe$f0, temp_dataframe$f0, par = parameters, min.rec= 3.5, max.rec= 4.5))
+
+if (length(optimalparameters) > 1 ){ # extracting each feature pr file
+  result_dataframe = data.frame(radius = optimalparameters[1], emddim = optimalparameters[2], delay = optimalparameters[3], filename = filename)
+  } else {
+   result_dataframe = data.frame(radius = NA, emddim = NA, delay = NA, filename = filename)
+  }
+return(result_dataframe)
+}
+
+###
+
+temp = lapply(filename, optimalparameter_extractor) #applying function to filelist
+opparam_df = rbindlist(temp, fill = TRUE) #dataframe with all optimal parameters
+
+opt_df = data.frame(opt_radius = median(opparam_df$radius, na.rm = TRUE),
+                     opt_emddim = median(opparam_df$emddim, na.rm = TRUE),
+                     opt_delay = median(opparam_df$delay, na.rm = TRUE))
+
+# Once you gotten 1 value of each of the three parameters pr. file, you can calculate the mean of each parameter, and use that in a another loop(function), where you’ll be using the crqa() function and extracting the features from it.
+
+
+### FUNCTION 2 ###
+rqa_extractor = function(filename) { #Function that extracts recurrence quantification analysis values
+  #reading in the data
+  library(data.table)
+  temp_dataframe = read.delim(filename)
+  
+  #perform the crqa() using the optimal values from the opt_df
+  rqa_values = NULL
+  rqa_values = try(crqa(temp_dataframe$f0, temp_dataframe$f0, delay=opt_df$opt_delay, embed=opt_df$opt_emddim, radius=opt_df$opt_radius,normalize=0,rescale=0,mindiagline = 2,minvertline = 2))
+ 
+  #if else statement 
+if (length(rqa_values) > 1){
+  result_dataframe = data.frame(RR = rqa_values[1], DET = rqa_values[2], NRLINE = rqa_values[3], maxL = rqa_values[4], L = rqa_values[5], ENTR = rqa_values[6], rENTR = rqa_values[7], LAM = rqa_values[8], TT = rqa_values[9], filename = filename)
+  } else {
+  result_dataframe = data.frame(RR = NA, DET = NA, NRLINE = NA, maxL = NA, L = NA, ENTR = NA, rENTR = NA, LAM = NA, TT = NA, filename = filename) #return result df
+  #in result df; RR, DET, NRLINE, maxL, L, ENTR, rENTR, LAM, TT
+  ##RR = percentage of black dots, DET = how many of the individual repitions occur in connected trajectories, L = average length of line structures, maxL = longest line, ENTR = entrophy (predictability of the next dot), TT = average length of vertical lines
+  }
+  result_dataframe$meanv = mean(temp_dataframe$f0, rm.na = T)
+  result_dataframe$sdv = sd(temp_dataframe$f0)
+  result_dataframe$medianv = median(temp_dataframe$f0)
+  result_dataframe$rangev = max(temp_dataframe$f0) - min(temp_dataframe$f0)
+  result_dataframe$iqrv = IQR(temp_dataframe$f0)
+  result_dataframe$madv = mad(temp_dataframe$f0)
+  result_dataframe$coefvarv = sd(temp_dataframe$f0)/mean(temp_dataframe$f0)
+
+return(result_dataframe)
+}
+
+###
+
+temp2 = lapply(filename, rqa_extractor) #applying function to filelist
+schizo_df = rbindlist(temp2, fill = T) #a dataframe with all the rqa parameters (acoustic features)
+
+
+#Getting all the beautiful information, stored in filename, into seperate columns:
+library(stringr)
+schizo_df$filename = str_extract(schizo_df$filename, "Study\\w+")
+schizo_df$study = str_extract(schizo_df$filename, "\\d+")
+schizo_df$diagnosis = str_extract(str_extract(schizo_df$filename, "D\\d+"), "\\d+")
+schizo_df$ID = str_extract(str_extract(schizo_df$filename, "S\\d+"), "\\d+")
+schizo_df$trial = str_extract(str_extract(schizo_df$filename, "T\\d+"), "\\d+")
+schizo_df = subset(schizo_df, select = -c(filename))
+
+##Rearranging dataframe. The first comma means keep all the rows, and the rest refers to the columns.
+schizo_df = schizo_df[,c("X", "ID", "diagnosis", "study", "trial", "meanv", "medianv", "sdv", "rangev", "iqrv", "madv", "coefvarv", "RR", "DET", "NRLINE", "maxL", "L", "ENTR", "rENTR", "LAM", "TT")]
+
+#Renaming levels in diagnosis variable: 0 = control, 1 = schizophrenia
+#library(plyr)
+#schizo_df$diagnosis <- as.factor(schizo_df$diagnosis)
+#schizo_df = plyr::revalue(schizo_df$diagnosis, c("0"="1", "control"="schizophrenia")) #DOES NOT WORK!
+
+#Renaming variable
+schizo_df = rename(schizo_df, c("ID"="Participant", "diagnosis"="Diagnosis", "study"="Study", "trial"="Trial"))
+
+#Saving file
+write.csv(schizo_df, file = "schizo_pitch_features.csv")
+
+#_______________________________________________________________________________________________________________
+
+###### WALKTHROUGH OF LOOP FROM CLASS ######
+# library(readr)
+# 
+# folder = "C:/Users/Helene/Documents/RStudio working directory/Experimental Methods 3/assignment3, part 1-2/Pitch" # ****** REMEMBER, fill folder with subset of data ****** #tilføj /test når du har lavet subset
+# 
+# filelist = list.files(path = folder, pattern = "*.txt", full.names =TRUE) #takes txt-files
+# 
+# filelist = filelist[1:100]
+# 
+# #creating empty variables for dataframes
+# Participant = NULL
+# MeanPitch = NULL
+# SDPitch = NULL
+# Range = NULL
+# N = 1 #starting with number 1 participant
+# 
+# #loop for extracting general descriptors and variables
+# for (i in filelist){
+#   x = read_csv(i)
+#   x = x$f0
+#   MeanPitch[N] = mean(x, na.rm=T)
+#   SDPitch[N] = sd(x, na.rm=T)
+#   Range[N] = range(x, na.rm=T)
+#   ID = str_extract(i, "S+\\d+") #using regular expressions to saving the letter and numbers after it, in a column. d=digits. like "S102"
+#   Participant[N] = str_extract(ID, "\\d+") #saving numbers after it (participant number), in a column. like "102"
+#   
+#   parameters = list(lgM =  50, steps = seq(1, 6, 1),  radiusspan = 20,  radiussample = 5, normalize = 0,  rescale = 0,  mindiagline = 2,  minvertline = 2,  tw = 0,  whiteline = FALSE,  recpt = FALSE,  fnnpercent = 10,  typeami = "mindip", lgM = 15)
+#   A = try(optimizeParam(x$f0, x$f0, par = parameters, min.rec= 3, max.rec= 5)) # I choose this method because i want to unfold the timeseries in the best phasespace
+#   
+#   if (length(A) < 2 {
+#     delay[N] = NA
+#     embed[N] = NA
+#     radius[N] = NA
+#   })
+#   else (delay[N] = A$delay)
+#     
+# }
+# 
+# Dataframe = data.frame (ID, Participant, MeanPitch, SDPitch)
+# 
+# # loop for extracting crqa
+# for (i in filelist) {
+#   x = read_csv(i)
+#   x = x$f0
+#   A = try(crqa(x, x, delay = A$delay))#allows us to put two timeseries to compare, but we don't want to do that right now, and therefore just put the same one twice  
+#   RR[N] = A$REC
+#   DET[N] = A$DET
+#   #put in rest
+# }
+# 
+# #write this shit so it doesn't get lost!
+# write.csv(dataframe, file = "file.csv")
+
+
+```
+
+***   
+
+*3.* Make one model per acoustic feature and test whether you can observe significant difference due to Diagnosis. Tip: Which other fixed factors should you control for (that is, include in the model)? Which random ones?
+- Bonus points: cross-validate the model and report the betas and standard errors from all rounds to get an idea of how robust the estimates are. 
+```{r}
+library(lmerTest)
+schizo_pitch_features = read.csv("schizo_pitch_features.csv")
+
+# RR = percentage of black dots 
+# DET = how many of the individual repetitions occur in connected trajectories
+# L = average length of line structures
+# maxL = longest line
+# ENTR = entrophy (predictability of the next dot)
+# TT = average length of vertical lines
+
+#Making models with all acoustic features.
+#Random effects: we are using diagnosis and trial over ID as a random effect because the participants have been matched in pairs according to education (one schizophrenic same age with same education as a non-schizophrenic), but there are bound to be all types of confounds; fx if we have a low-functioning schizophrenic with a low education (e.g. 3rd grade), and we have to find a match for this, we need a non-schizophrenic person with a 3rd grade (or very similar), but it is very uncommon in Denmark to only have a 3rd grade and not have all kinds of other problems as well). With this random effect we make the model know that the matches are not necessarily the exact same, the slopes can vary.
+Mean_model = lmerTest::lmer(meanv ~ Diagnosis + (1+Trial|Study), schizo_pitch_features)
+summary(Mean_model)
+
+Median_model = lmerTest::lmer(medianv ~ Diagnosis + (1+Trial|Study), schizo_pitch_features)
+summary(Median_model)
+
+SD_model = lmerTest::lmer(sdv ~ Diagnosis + (1+Trial|Study), schizo_pitch_features)
+summary(SD_model)
+
+Range_model = lmerTest::lmer(rangev ~ Diagnosis + (1+Trial|Study), schizo_pitch_features)
+summary(Range_model) 
+
+Coefvar_model = lmerTest::lmer(coefvarv ~ Diagnosis + (1+Trial|Study), schizo_pitch_features)
+summary(Coefvar_model) 
+
+RR_model = lmerTest::lmer(RR ~ Diagnosis + (1+Trial|Study), schizo_pitch_features)
+summary(RR_model)
+
+DET_model = lmerTest::lmer(DET ~ Diagnosis + (1+Trial|Study), schizo_pitch_features)
+summary(DET_model)
+
+L_model = lmerTest::lmer(L ~ Diagnosis + (1+Trial|Study), schizo_pitch_features)
+summary(L_model)
+  
+maxL_model = lmerTest::lmer(maxL ~ Diagnosis + (1+Trial|Study), schizo_pitch_features)
+summary(maxL_model)
+  
+ENTR_model = lmerTest::lmer(ENTR ~ Diagnosis + (1+Trial|Study), schizo_pitch_features)
+summary(ENTR_model)
+
+TT_model = lmerTest::lmer(TT ~ Diagnosis + (1|Study), schizo_pitch_features)
+summary(TT_model)
+
+
+#Using a model with i.e. pitch recurrence range (PitchRR): How do we interpret the output? (i.e. B=5, SE=1.2, p<0.001)
+# imagine we have an embedding dimension of 2 and a delay of 3: This i 2 data points (each 10 miliseconds), separated by 3 data points (i.e. 1 and 4).
+
+```
+***   
+
+*3a.* Is study a significant predictor in these models? What should you infer from this? Does study interact with diagnosis? What should you infer from this? 
+
+```{r}
+Mean_model2 = lmerTest::lmer(meanv ~ Diagnosis + Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+summary(Mean_model2) 
+
+Median_model2 = lmerTest::lmer(medianv ~ Diagnosis + Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+summary(Median_model2)
+
+SD_model2 = lmerTest::lmer(sdv ~ Diagnosis + Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+summary(SD_model2)
+
+Range_model2 = lmerTest::lmer(rangev ~ Diagnosis * Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+summary(Range_model2) 
+
+Coefvar_model2 = lmerTest::lmer(coefvarv ~ Diagnosis * Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+summary(Coefvar_model2)
+
+RR_model2 = lmer(RR ~ Diagnosis * Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+summary(RR_model2)
+
+DET_model2 = lmer(DET ~ Diagnosis * Study + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+summary(DET_model2)
+
+L_model2 = lmer(L ~ Diagnosis * Study + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+summary(L_model2)
+  
+maxL_model2 = lmer(maxL ~ Diagnosis * Study + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+summary(maxL_model2)
+  
+ENTR_model2 = lmer(ENTR ~ Diagnosis * Study + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+summary(ENTR_model2)
+
+TT_model2 = lmer(TT ~ Diagnosis * Study + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+summary(TT_model2)
+```
+
+To see if any of the acoustic features vary by diagnosis, linear mixed effects models were run on each acoustic feature (range, RR, DET, L, maxL, ENTR, TT). Used as fixed effects was diagnosis, study and trial, with an interaction between diagnosis and study. Diagnosis and trial over participant was specified as a random effect to control for variation in the matched participants.
+
+Study was found to be a significant predicter of all acoustic features but L(average length of line structures). This is probably because the methods in the different studies differ, giving variyng results amongst the studies, but results that look alike in the same study. Because of this trend in each study, it becomes a significant predictor of the features when we use several studies in the same analysis.
+
+Study was found to significantly interact with diagnosis in the model where TT(average length of vertical lines) was predicted. Therefore, the main effects of the TT model should be ignored, as they cannot be trusted because of the interaction.
+
+```{r}
+#Calculating mean pitch for all participants
+mean(schizo_pitch_features$meanv[schizo_pitch_features$Diagnosis=="Control"])
+mean(schizo_pitch_features$meanv[schizo_pitch_features$Diagnosis=="Schizophrenia"])
+
+#Mean range
+mean(schizo_pitch_features$rangev[schizo_pitch_features$Diagnosis=="Control"])
+mean(schizo_pitch_features$rangev[schizo_pitch_features$Diagnosis=="Schizophrenia"])
+
+#Mean CoefVar
+mean(schizo_pitch_features$coefvarv[schizo_pitch_features$Diagnosis=="Control"])
+mean(schizo_pitch_features$coefvarv[schizo_pitch_features$Diagnosis=="Schizophrenia"])
+
+#Mean RR
+mean(schizo_pitch_features$RR[schizo_pitch_features$Diagnosis=="Control"], na.rm=T)
+mean(schizo_pitch_features$RR[schizo_pitch_features$Diagnosis=="Schizophrenia"], na.rm=T)
+```
+
+
+```{r}
+#Trying random visualizing stuffz
+library(lattice)
+lattice::splom(schizo_pitch_features[c("rangev","RR","DET", "maxL", "L", "ENTR", "TT")], 
+  	main="Relationships between features")
+```
+
+
+***   
+
+4. Bonus Question: Compare effect size of diagnosis across the different measures. Which measure seems most sensitive?
+- Tip: to compare across measures you need to put all of them on the same scale, that is, you need to "standardize" them (z-score)
+
+5. Bonus question. In the Clinical Info file you have additional information about the participants. Which additional parameters (e.g. age, gender) should we control for? Report the effects.
+
+***   
+
+6. *Write a paragraph reporting methods and results*
+```{r}
+
+```
+
+
+[Next assignment: can we use these measures to build a tool that diagnoses people from voice only?]
+
+## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
