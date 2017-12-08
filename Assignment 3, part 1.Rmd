@@ -390,13 +390,13 @@ summary(TT_model)
 *3a.* Is study a significant predictor in these models? What should you infer from this? Does study interact with diagnosis? What should you infer from this? 
 
 ```{r}
-Mean_model2 = lmerTest::lmer(meanv ~ Diagnosis + Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+Mean_model2 = lmerTest::lmer(meanv ~ Diagnosis * Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
 summary(Mean_model2) 
 
-Median_model2 = lmerTest::lmer(medianv ~ Diagnosis + Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+Median_model2 = lmerTest::lmer(medianv ~ Diagnosis * Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
 summary(Median_model2)
 
-SD_model2 = lmerTest::lmer(sdv ~ Diagnosis + Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
+SD_model2 = lmerTest::lmer(sdv ~ Diagnosis * Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
 summary(SD_model2)
 
 Range_model2 = lmerTest::lmer(rangev ~ Diagnosis * Study + Trial + (1+Diagnosis+Trial|Participant), schizo_pitch_features)
@@ -426,7 +426,7 @@ summary(TT_model2)
 
 To see if any of the acoustic features vary by diagnosis, linear mixed effects models were run on each acoustic feature (range, RR, DET, L, maxL, ENTR, TT). Used as fixed effects was diagnosis, study and trial, with an interaction between diagnosis and study. Diagnosis and trial over participant was specified as a random effect to control for variation in the matched participants.
 
-Study was found to be a significant predicter of all acoustic features but L(average length of line structures). This is probably because the methods in the different studies differ, giving variyng results amongst the studies, but results that look alike in the same study. Because of this trend in each study, it becomes a significant predictor of the features when we use several studies in the same analysis.
+Study was found to be a significant predictor of all acoustic features but L(average length of line structures). This is probably because the methods in the different studies differ, giving variyng results amongst the studies, but results that look alike in the same study. Because of this trend in each study, it becomes a significant predictor of the features when we use several studies in the same analysis.
 
 Study was found to significantly interact with diagnosis in the model where TT(average length of vertical lines) was predicted. Therefore, the main effects of the TT model should be ignored, as they cannot be trusted because of the interaction.
 
